@@ -2429,3 +2429,537 @@ export default {
     }
   }
 };
+
+
+
+
+
+
+// ==========================================
+// 1. GLOBAL CONSTANTS & PRE-COMPILED REGEX
+// ==========================================
+const LOGO_URL = "https://avatars.githubusercontent.com/u/108781856?v=4";
+const CACHE_NAME = 'linknature-prod-final-master'; 
+const CACHE_TTL = 86400; // 24 Hours
+const ADMIN_SECRET = "superadmin123";
+const SIX_MONTHS_TTL = 15552000; // 6 Months in seconds
+
+// Regex optimizations (Security Validation)
+const REGEX_IP_CLEANUP = /[^0-9\.]/g;
+const REGEX_VALID_IP = /^(\d{1,3}\.){3}\d{1,3}$/;
+
+// Security Headers (Hacker Protection)
+const SECURE_HEADERS = {
+  "Content-Security-Policy": "default-src 'self' 'unsafe-inline' https://avatars.githubusercontent.com;",
+  "X-Content-Type-Options": "nosniff",
+  "X-Frame-Options": "DENY"
+};
+
+// Reusable Headers
+const HEADERS = {
+  html: { "Content-Type": "text/html;charset=UTF-8", ...SECURE_HEADERS },
+  json: { "Content-Type": "application/json", "Cache-Control": `public, max-age=${CACHE_TTL}`, ...SECURE_HEADERS },
+  sw: { "Content-Type": "application/javascript", "Cache-Control": "no-cache, max-age=0", ...SECURE_HEADERS },
+  plain: { "Content-Type": "text/plain", ...SECURE_HEADERS },
+  redirect: {
+    "Cache-Control": "no-store, no-cache, must-revalidate, max-age=0",
+    "Pragma": "no-cache",
+    "Expires": "0",
+    ...SECURE_HEADERS
+  }
+};
+
+// ==========================================
+// 2. HELPER FUNCTIONS
+// ==========================================
+function normalizeId(id) {
+  if (!id) return "";
+  return String(id).toLowerCase().replace(/[^a-z0-9]/g, '').trim();
+}
+
+function escapeHTML(str) {
+  if (!str) return "LinkNatureAI"; // Default name
+  return String(str).substring(0, 30).replace(/[&<>"']/g, function(m) {
+    return { '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#039;' }[m];
+  });
+}
+
+// ==========================================
+// 3. ULTRA-LOW MEMORY SECURITY SYSTEM
+// ==========================================
+const rateLimitMap = new Map();
+const RATE_LIMIT_WINDOW = 60000; // 1 min
+const MAX_REQUESTS = 150;
+
+function isTrafficSafe(ip, request) {
+  const url = new URL(request.url);
+  const ua = (request.headers.get('user-agent') || '').toLowerCase();
+ 
+  if (!url.pathname.includes('/update')) {
+    if (['nmap', 'masscan', 'zgrab', 'python', 'curl', 'wget'].some(bot => ua.includes(bot))) return false;
+  }
+
+  if (rateLimitMap.size > 5000) rateLimitMap.clear();
+
+  const now = Date.now();
+  const record = rateLimitMap.get(ip);
+
+  if (record) {
+    if (now > record.resetTime) {
+      rateLimitMap.set(ip, { count: 1, resetTime: now + RATE_LIMIT_WINDOW });
+      return true;
+    }
+    if (record.count >= MAX_REQUESTS) return false;
+    record.count++;
+    return true;
+  }
+
+  rateLimitMap.set(ip, { count: 1, resetTime: now + RATE_LIMIT_WINDOW });
+  return true;
+}
+
+// ==========================================
+// 4. PWA HTML UI (Smart Waterfall: 10s/1s mDNS + 10s Local IP)
+// ==========================================
+const generateHTML = (deviceId, rawProjectName) => {
+  const safeProjectName = escapeHTML(rawProjectName);
+  
+  return `<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1, maximum-scale=1, user-scalable=no">
+  <meta name="theme-color" content="#0a0a0a">
+  <title>${safeProjectName}</title>
+  <link rel="manifest" href="/manifest.json?id=${deviceId}&p=${encodeURIComponent(safeProjectName)}">
+  <style>
+    :root { --primary: #00ffcc; --primary-glow: rgba(0, 255, 204, 0.6); --bg-color: #0a0a0a; }
+    * { box-sizing: border-box; -webkit-tap-highlight-color: transparent; }
+    body { margin: 0; background: var(--bg-color); display: flex; justify-content: center; align-items: center; height: 100vh; font-family: 'Segoe UI', sans-serif; overflow: hidden; }
+    .ambient-glow { position: absolute; width: 300px; height: 300px; background: var(--primary); filter: blur(140px); opacity: 0.15; border-radius: 50%; animation: pulseGlow 4s ease-in-out infinite alternate; z-index: 0; }
+    @keyframes pulseGlow { 0% { transform: scale(0.8); opacity: 0.1; } 100% { transform: scale(1.2); opacity: 0.25; } }
+    .brand-container { position: relative; z-index: 10; display: flex; flex-direction: column; align-items: center; gap: 20px; width: 100%; padding: 0 20px; }
+    .brand-logo { width: 160px; height: 160px; border-radius: 35px; object-fit: cover; box-shadow: 0 10px 30px var(--primary-glow), inset 0 0 0 2px rgba(255,255,255,0.1); background: #111; }
+    .status-text { color: #fff; font-size: 1.2rem; font-weight: 600; text-align: center; margin-top: 10px; z-index: 20;}
+    .spinner { border: 4px solid rgba(255,255,255,0.1); border-left-color: var(--primary); border-radius: 50%; width: 30px; height: 30px; animation: spin 1s linear infinite; display: inline-block; vertical-align: middle; margin-right: 10px;}
+    @keyframes spin { 0% { transform: rotate(0deg); } 100% { transform: rotate(360deg); } }
+    #installBtn { width: 100%; max-width: 320px; justify-content: center; padding: 14px 32px; border: 1px solid rgba(255, 255, 255, 0.1); border-radius: 30px; background: rgba(0, 255, 204, 0.1); backdrop-filter: blur(10px); color: var(--primary); font-weight: 600; font-size: 16px; box-shadow: 0 8px 32px rgba(0, 0, 0, 0.3); cursor: pointer; display: none; transition: all 0.3s ease; align-items: center; gap: 8px; margin-top: 15px;}
+    #installBtn:hover { background: var(--primary); color: #000; box-shadow: 0 10px 25px var(--primary-glow); }
+    @media all and (display-mode: standalone) { #installBtn { display: none !important; } }
+  </style>
+</head>
+<body>
+  <div class="ambient-glow"></div>
+  <div class="brand-container">
+    <img id="logoImg" src="${LOGO_URL}" class="brand-logo" alt="Logo">
+    <div class="status-text"><div class="spinner" id="mainSpinner"></div> <span id="mainText">Connecting...</span></div>
+    <div id="statusSubText" style="color: rgba(255,255,255,0.5); font-size: 0.85rem; margin-top:-5px; z-index: 20;">Initializing...</div>
+    <button id="installBtn">
+      <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"></path><polyline points="7 10 12 15 17 10"></polyline><line x1="12" y1="15" x2="12" y2="3"></line></svg>
+      Install App
+    </button>
+  </div>
+
+  <script>
+    const TARGET_ID = "${deviceId}";
+    const mdnsUrl = "http://" + TARGET_ID + ".local/";
+    const subText = document.getElementById("statusSubText");
+    const installBtn = document.getElementById("installBtn");
+    const mainSpinner = document.getElementById("mainSpinner");
+    const mainText = document.getElementById("mainText");
+
+    // ==========================================
+    // 1. STANDALONE APP DETECTION (Hide Install Button instantly)
+    // ==========================================
+    const isStandalone = window.matchMedia('(display-mode: standalone)').matches || window.navigator.standalone === true;
+    if (isStandalone) {
+      installBtn.style.display = 'none'; 
+    }
+
+    // ==========================================
+    // 2. CRITICAL: SUPER FAST MDNS LOCK OPEN
+    // ==========================================
+    if (localStorage.getItem('mdns_locked_' + TARGET_ID) === 'true') {
+      mainSpinner.style.display = "none";
+      mainText.innerText = "Fast Routing...";
+      subText.innerText = "";
+      window.location.replace(mdnsUrl);
+    } else {
+      
+      async function checkPing(url, timeoutMs) {
+        try {
+          const controller = new AbortController();
+          const timeout = setTimeout(() => controller.abort(), timeoutMs);
+          await fetch(url + "ping?t=" + Date.now(), { mode: 'no-cors', cache: 'no-store', signal: controller.signal });
+          clearTimeout(timeout);
+          return true; 
+        } catch (err) {
+          return false; 
+        }
+      }
+
+      // WATERFALL LOGIC (Isolated Checks)
+      async function startSmartConnection() {
+        
+        // ==========================================
+        // STEP 1: mDNS Check (10s First Time, 1s Subsequent Times)
+        // ==========================================
+        let mdnsWaitTime = localStorage.getItem('mdns_failed_' + TARGET_ID) === 'true' ? 1000 : 10000;
+        
+        subText.innerText = "Checking mDNS (" + (mdnsWaitTime/1000) + "s)...";
+        if (await checkPing(mdnsUrl, mdnsWaitTime)) { 
+          // mDNS WORKS! Lock it permanently and reset failed flag.
+          localStorage.setItem('mdns_locked_' + TARGET_ID, 'true');
+          localStorage.setItem('mdns_failed_' + TARGET_ID, 'false');
+          window.location.replace(mdnsUrl);
+          return;
+        } else {
+          // mDNS FAILED! Set flag so next time it checks for only 1s.
+          localStorage.setItem('mdns_failed_' + TARGET_ID, 'true');
+        }
+
+        // ==========================================
+        // STEP 2: Local IP Check (10s Max)
+        // ==========================================
+        const savedIp = localStorage.getItem('last_ip_' + TARGET_ID);
+        if (savedIp) {
+          subText.innerText = "Checking Local IP (10s)...";
+          const ipUrl = "http://" + savedIp + "/";
+          if (await checkPing(ipUrl, 10000)) {
+            window.location.replace(ipUrl);
+            return; 
+          }
+        }
+
+        // ==========================================
+        // STEP 3: Server Request (Only when local IPs fail)
+        // ==========================================
+        subText.innerText = "Requesting Cloudflare for new IP...";
+        try {
+          const res = await fetch("/api/get-ip/" + TARGET_ID, { cache: "no-store" });
+          const data = await res.json();
+         
+          if (data.ip) {
+            const newIpUrl = "http://" + data.ip + "/";
+            localStorage.setItem('last_ip_' + TARGET_ID, data.ip); 
+            window.location.replace(newIpUrl);
+          } else {
+            subText.innerText = "Device offline or not synced.";
+          }
+        } catch (e) {
+          subText.innerText = "Redirecting via Cloudflare...";
+          window.location.replace("/api/connect/" + TARGET_ID);
+        }
+      }
+      setTimeout(startSmartConnection, 100);
+    }
+
+    // ==========================================
+    // 3. SMART PWA INSTALLATION LOGIC (Direct 1-Click)
+    // ==========================================
+    let deferredPrompt = null;
+   
+    window.addEventListener('beforeinstallprompt', (e) => {
+      e.preventDefault();
+      if (!isStandalone) {
+        deferredPrompt = e;
+        installBtn.style.display = "flex";
+      }
+    });
+   
+    installBtn.onclick = async () => {
+      if (deferredPrompt) {
+        deferredPrompt.prompt();
+        const { outcome } = await deferredPrompt.userChoice;
+        if (outcome === 'accepted') {
+            installBtn.style.display = "none";
+        }
+        deferredPrompt = null;
+      }
+    };
+
+    window.addEventListener('appinstalled', () => {
+      installBtn.style.display = "none";
+      deferredPrompt = null;
+    });
+   
+    // ==========================================
+    // 4. ZERO-LOAD DAILY AUTO UPDATE
+    // ==========================================
+    if ('serviceWorker' in navigator) {
+      window.addEventListener('load', () => {
+        navigator.serviceWorker.register('/sw.js').then(reg => {
+          const lastCheck = localStorage.getItem('last_update_check');
+          const now = Date.now();
+          if (!lastCheck || (now - parseInt(lastCheck)) > 86400000) { 
+            localStorage.setItem('last_update_check', now.toString());
+            reg.update();
+          }
+          reg.onupdatefound = () => {
+            const installingWorker = reg.installing;
+            installingWorker.onstatechange = () => {
+              if (installingWorker.state === 'installed' && navigator.serviceWorker.controller) {
+                window.location.reload();
+              }
+            };
+          };
+        }).catch(err => console.warn('SW Warning:', err));
+      });
+    }
+  </script>
+</body>
+</html>`;
+}
+
+// ==========================================
+// 5. Dynamic Manifest & Service Worker
+// ==========================================
+const generateManifest = (deviceId, rawProjectName) => {
+  const safeProjectName = escapeHTML(rawProjectName);
+  return JSON.stringify({
+    name: safeProjectName,
+    short_name: safeProjectName.length > 15 ? safeProjectName.substring(0, 15) : safeProjectName, 
+    description: `Secure gateway to ${safeProjectName}`,
+    start_url: `/${deviceId}?p=${encodeURIComponent(safeProjectName)}`,
+    display: "standalone",
+    orientation: "portrait",
+    background_color: "#0a0a0a",
+    theme_color: "#0a0a0a",
+    icons: [
+      { src: LOGO_URL, sizes: "192x192", type: "image/png", purpose: "any" },
+      { src: LOGO_URL, sizes: "512x512", type: "image/png", purpose: "any" }
+    ]
+  });
+};
+
+const SW_CONTENT = `
+const CACHE_NAME = '${CACHE_NAME}';
+const ASSETS = ["${LOGO_URL}"];
+
+self.addEventListener('install', e => {
+  self.skipWaiting();
+  e.waitUntil(caches.open(CACHE_NAME).then(cache => cache.addAll(ASSETS)).catch(() => {}));
+});
+
+self.addEventListener('activate', e => {
+  e.waitUntil(
+    caches.keys().then(keys => Promise.all(
+      keys.filter(key => key !== CACHE_NAME).map(key => caches.delete(key))
+    )).then(() => self.clients.claim())
+  );
+});
+
+self.addEventListener('fetch', e => {
+  const url = new URL(e.request.url);
+ 
+  // Do not intercept local network
+  if (url.hostname.endsWith('.local') || /^(\\d{1,3}\\.){3}\\d{1,3}$/.test(url.hostname)) {
+    return;
+  }
+
+  // Bypass cache for API
+  if (url.pathname.includes("/api/") || url.pathname.includes("/update")) {
+    return e.respondWith(fetch(e.request).catch(() => new Response("System Offline", {status: 503})));
+  }
+
+  // FAST LOAD: Cache-First for HTML (Makes it load instantly without hitting server)
+  if (e.request.mode === 'navigate' || e.request.destination === 'document') {
+    e.respondWith(
+      caches.match(e.request).then(cached => {
+        return cached || fetch(e.request);
+      }).catch(() => new Response("No Internet Connection", {status: 503}))
+    );
+    return;
+  }
+ 
+  e.respondWith(
+    caches.match(e.request).then(cached => cached || fetch(e.request))
+  );
+});
+`;
+
+// ==========================================
+// 6. MAIN WORKER ROUTING LOGIC
+// ==========================================
+export default {
+  async fetch(request, env, ctx) {
+    try {
+      if (!['GET', 'POST', 'HEAD', 'OPTIONS'].includes(request.method)) {
+        return new Response("Method Not Allowed", { status: 405, headers: HEADERS.plain });
+      }
+
+      const url = new URL(request.url);
+      const cache = caches.default;
+      const clientIP = request.headers.get('CF-Connecting-IP') || 'unknown';
+
+      // 1. Security Check
+      if (!isTrafficSafe(clientIP, request)) {
+        return new Response("Too Many Requests. Please wait a moment.", { status: 429, headers: HEADERS.plain });
+      }
+
+      // 2. Prevent Large Payload Attacks
+      if (request.method === "POST") {
+        const len = request.headers.get("content-length");
+        if (len && parseInt(len) > 1024) return new Response("Payload Large", { status: 413 });
+      }
+
+      if (!env.ESP_DATA) return new Response("Configuration Error: KV missing.", { status: 500 });
+
+      // ---> A. Admin Route (Get Devices Count) <---
+      if (request.method === "GET" && url.pathname === "/api/admin/devices") {
+        if (url.searchParams.get("key") !== ADMIN_SECRET) {
+          return new Response("Unauthorized Access!", { status: 401, headers: HEADERS.plain });
+        }
+        let count = 0; let listComplete = false; let cursor;
+        while (!listComplete) {
+          const list = await env.ESP_DATA.list({ cursor });
+          count += list.keys.length;
+          listComplete = list.list_complete;
+          cursor = list.cursor;
+        }
+        return new Response(JSON.stringify({ status: "Success", total_active_devices: count }), { headers: HEADERS.json });
+      }
+
+      // ---> B. Update IP (6 MONTHS TTL & STRICT DUPLICATE PREVENTION) <---
+      if (request.method === "POST" && url.pathname.includes("update")) {
+        const data = await request.json().catch(() => null);
+        if (!data?.id || !data?.ip) return new Response("Missing Data", { status: 400 });
+
+        const cleanId = normalizeId(data.id);
+        const cleanIp = String(data.ip).replace(REGEX_IP_CLEANUP, '');
+
+        if (!cleanId || !REGEX_VALID_IP.test(cleanIp)) {
+          return new Response("Invalid Format", { status: 400 });
+        }
+       
+        const existingIp = await env.ESP_DATA.get(cleanId);
+       
+        // 6 MONTHS TTL Applied (15552000 seconds)
+        if (existingIp !== cleanIp) {
+          await env.ESP_DATA.put(cleanId, cleanIp, { expirationTtl: SIX_MONTHS_TTL });
+          return new Response("IP Updated & Synced", { status: 200 });
+        } else {
+          await env.ESP_DATA.put(cleanId, cleanIp, { expirationTtl: SIX_MONTHS_TTL });
+          return new Response("IP Unchanged, Ping Acknowledged", { status: 200 });
+        }
+      }
+
+      // ---> C. Serve SW & Manifest <---
+      if (request.method === "GET" && url.pathname === "/sw.js") {
+        return new Response(SW_CONTENT, { headers: HEADERS.sw });
+      }
+      if (request.method === "GET" && url.pathname.startsWith("/manifest.json")) {
+        const id = normalizeId(url.searchParams.get("id"));
+        const projectName = url.searchParams.get("p") || "LinkNatureAI";
+        return new Response(generateManifest(id, projectName), { headers: HEADERS.json });
+      }
+
+      // ---> E. API: Get Direct IP for Smart Cache <---
+      if (request.method === "GET" && url.pathname.startsWith("/api/get-ip/")) {
+        const idParts = url.pathname.split("/");
+        const id = normalizeId(idParts[idParts.length - 1]);
+        const ip = await env.ESP_DATA.get(id);
+       
+        if (!ip) {
+          return new Response(JSON.stringify({ error: "No IP found" }), { status: 404, headers: HEADERS.json });
+        }
+        const cleanIP = ip.replace(REGEX_IP_CLEANUP, '');
+        return new Response(JSON.stringify({ ip: cleanIP }), { status: 200, headers: HEADERS.json });
+      }
+
+      // ---> F. Redirect Logic (Original Fallback Kept Intact) <---
+      if (request.method === "GET" && url.pathname.startsWith("/api/connect/")) {
+        const idParts = url.pathname.split("/");
+        const id = normalizeId(idParts[idParts.length - 1]);
+        const ip = await env.ESP_DATA.get(id);
+       
+        if (!ip) {
+           return new Response(`
+             <!DOCTYPE html>
+             <html>
+               <head>
+                 <meta http-equiv="refresh" content="5">
+                 <meta name="viewport" content="width=device-width, initial-scale=1">
+                 <style>
+                   body { background: #0a0a0a; color: #00ffcc; font-family: sans-serif; display: flex; flex-direction: column; align-items: center; justify-content: center; height: 100vh; margin: 0; text-align: center; }
+                   .loader { border: 4px solid rgba(0,255,204,0.1); border-top: 4px solid #00ffcc; border-radius: 50%; width: 40px; height: 40px; animation: spin 1s linear infinite; margin-bottom: 20px;}
+                   @keyframes spin { 0% { transform: rotate(0deg); } 100% { transform: rotate(360deg); } }
+                   p { opacity: 0.7; font-size: 14px; }
+                 </style>
+               </head>
+               <body>
+                 <div class="loader"></div>
+                 <h2>Syncing Device...</h2>
+                 <p>Waiting for secure connection. Retrying automatically...</p>
+               </body>
+             </html>
+           `, { status: 404, headers: HEADERS.html });
+        }
+       
+        const cleanIP = ip.replace(REGEX_IP_CLEANUP, '');
+        return new Response(null, {
+          status: 302,
+          headers: {
+            "Location": `http://${cleanIP}`,
+            ...HEADERS.redirect
+          }
+        });
+      }
+
+      // ---> G. Render HTML Interface (UI) <---
+      if (request.method === "GET") {
+        let id = normalizeId(url.pathname.replace(/^\/+/g, '').split('?')[0]);
+        if (id === "favicon.ico") return new Response(null, { status: 204 });
+        if (!id) return new Response("Access Denied", { status: 400, headers: HEADERS.plain });
+       
+        const projectName = url.searchParams.get("p") || "LinkNatureAI";
+        const response = new Response(generateHTML(id, projectName), { headers: HEADERS.html });
+        
+        ctx.waitUntil(cache.put(request, response.clone()));
+        return response;
+      }
+     
+      return new Response("Route Not Found", { status: 404 });
+    } catch (err) {
+      return new Response(`System Exception: ${err.message}`, { status: 500 });
+    }
+  },
+
+  // ==========================================
+  // 7. AUTO BACKGROUND CLEANUP (Duplicate IP Fix)
+  // ==========================================
+  async scheduled(event, env, ctx) {
+    ctx.waitUntil(this.runAutoCleanup(env));
+  },
+
+  async runAutoCleanup(env) {
+    if (!env.ESP_DATA) return;
+
+    let cursor;
+    let listComplete = false;
+    const seenIps = new Set();
+
+    while (!listComplete) {
+      const list = await env.ESP_DATA.list({ cursor });
+      
+      for (const key of list.keys) {
+        const id = key.name;
+        const ip = await env.ESP_DATA.get(id);
+        
+        if (id !== id.toLowerCase() || /[^a-z0-9]/.test(id)) {
+          await env.ESP_DATA.delete(id);
+          continue;
+        }
+        
+        if (seenIps.has(ip)) {
+          await env.ESP_DATA.delete(id);
+        } else {
+          seenIps.add(ip);
+        }
+      }
+      
+      listComplete = list.list_complete;
+      cursor = list.cursor;
+    }
+  }
+};
